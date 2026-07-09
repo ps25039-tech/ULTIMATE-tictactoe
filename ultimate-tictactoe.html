@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>얼티미트 틱택토</title>
+<style>
+  :root{
+    --paper:#FBF9F2;
+    --grid:#D9E2EC;
+    --ink:#3A3A3A;
+    --ink-x:#2B4C9B;   /* 파란 볼펜 */
+    --ink-o:#C63D3D;   /* 빨간 펜 */
+    --hl:#FFEE8C;      /* 형광펜 */
+    --pencil:#8A8A8A;
+    --won-x:#E4EAF7;
+    --won-o:#F9E4E4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{
+    min-height:100vh;
+    background:var(--paper);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:28px 28px;
+    font-family:"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;
+    color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;
+    padding:24px 12px 48px;
+  }
+  header{text-align:center;margin-bottom:14px;}
+  h1{
+    font-size:clamp(26px,5vw,40px);
+    letter-spacing:-1px;
+    font-weight:800;
+  }
+  h1 .x{color:var(--ink-x)} h1 .o{color:var(--ink-o)}
+  .sub{color:var(--pencil);font-size:13px;margin-top:4px;}
+
+  .toolbar{
+    display:flex;gap:8px;flex-wrap:wrap;justify-content:center;
+    margin-bottom:14px;
+  }
+  button{
+    font-family:inherit;font-size:14px;font-weight:700;
+    padding:8px 16px;border-radius:10px;cursor:pointer;
+    border:2px solid var(--ink);
+    background:#fff;color:var(--ink);
+    box-shadow:2px 2px 0 var(--ink);
+    transition:transform .08s, box-shadow .08s;
+  }
+  button:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink);}
+  button:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink);}
+  button:focus-visible{outline:3px solid var(--ink-x);outline-offset:2px;}
+  button.on{background:var(--hl);}
+
+  .status{
+    min-height:34px;display:flex;align-items:center;gap:8px;
+    font-size:16px;font-weight:700;margin-bottom:12px;
+    background:#fff;border:2px dashed var(--pencil);
+    padding:6px 18px;border-radius:999px;
+  }
+  .status .badge{
+    display:inline-flex;width:22px;height:22px;
+  }
+
+  /* ===== 보드 ===== */
+  .macro{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:0;
+    width:min(92vw,560px);aspect-ratio:1;
+    background:#fff;
+    border:3px solid var(--ink);border-radius:14px;
+    box-shadow:5px 5px 0 rgba(0,0,0,.12);
+    padding:10px;position:relative;
+  }
+  .mini{
+    position:relative;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    grid-template-rows:repeat(3,1fr);
+    gap:4px;padding:9px;border-radius:8px;
+    transition:background .25s;
+    min-width:0;min-height:0;
+  }
+  /* 굵은 매크로 구분선 */
+  .mini:nth-child(3n+1),.mini:nth-child(3n+2){border-right:3px solid var(--ink);}
+  .mini:nth-child(-n+6){border-bottom:3px solid var(--ink);}
+
+  .mini.active{
+    background:var(--hl);
+    animation:hlpulse 1.4s ease-in-out infinite;
+  }
+  @keyframes hlpulse{
+    0%,100%{box-shadow:inset 0 0 0 0 rgba(0,0,0,0);}
+    50%{box-shadow:inset 0 0 0 3px rgba(0,0,0,.08);}
+  }
+  .mini.wx{background:var(--won-x);}
+  .mini.wo{background:var(--won-o);}
+  .mini.wd{background:#EEEDE8;}
+
+  .cell{
+    border:1.5px solid var(--grid);
+    border-radius:5px;background:rgba(255,255,255,.7);
+    cursor:pointer;position:relative;
+    padding:0;box-shadow:none;
+    min-width:0;min-height:0;
+    overflow:hidden;
+  }
+  .cell:hover{transform:none;box-shadow:none;}
+  .mini.active .cell:hover{background:#fff;border-color:var(--pencil);}
+  .cell:disabled{cursor:default;}
+  .cell svg{
+    position:absolute;inset:11%;
+    width:78%;height:78%;
+  }
+
+  .overlay{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;
+  }
+  .overlay svg{width:72%;height:72%;filter:drop-shadow(1px 2px 0 rgba(0,0,0,.15));}
+  .overlay .draw-mark{
+    font-size:clamp(44px,9vw,72px);font-weight:800;color:var(--pencil);
+    transform:rotate(-8deg);
+    text-shadow:1px 2px 0 rgba(0,0,0,.15);
+  }
+
+  /* 손그림 스트로크 애니메이션 */
+  .stroke{
+    fill:none;stroke-width:12;stroke-linecap:round;
+    stroke-dasharray:300;stroke-dashoffset:300;
+    animation:draw .35s ease-out forwards;
+  }
+  .stroke.s2{animation-delay:.18s;}
+  .stroke-o{
+    fill:none;stroke-width:12;stroke-linecap:round;
+    stroke-dasharray:290;stroke-dashoffset:290;
+    animation:draw .5s ease-out forwards;
+  }
+  @keyframes draw{to{stroke-dashoffset:0;}}
+  @media (prefers-reduced-motion: reduce){
+    .stroke,.stroke-o{animation:none;stroke-dashoffset:0;}
+    .mini.active{animation:none;}
+  }
+
+  details{
+    margin-top:18px;width:min(92vw,560px);
+    background:#fff;border:2px dashed var(--pencil);border-radius:12px;
+    padding:12px 16px;font-size:14px;line-height:1.7;
+  }
+  summary{cursor:pointer;font-weight:700;}
+  details p{margin-top:8px;color:#555;}
+
+  /* 승리 배너 */
+  .banner{
+    position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.35);z-index:10;
+  }
+  .banner.show{display:flex;}
+  .banner-card{
+    background:var(--paper);border:3px solid var(--ink);border-radius:16px;
+    box-shadow:6px 6px 0 rgba(0,0,0,.3);
+    padding:32px 44px;text-align:center;
+    transform:rotate(-2deg);
+    animation:pop .25s ease-out;
+  }
+  @keyframes pop{from{transform:rotate(-2deg) scale(.85);opacity:0;}to{transform:rotate(-2deg) scale(1);opacity:1;}}
+  .banner-card h2{font-size:30px;margin-bottom:6px;}
+  .banner-card p{color:var(--pencil);margin-bottom:18px;}
+
+  /* 팡파레 색종이 */
+  #confetti{
+    position:fixed;inset:0;z-index:20;
+    pointer-events:none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>얼티미트 <span class="x">틱</span><span class="o">택</span>토</h1>
+  <div class="sub">작은 보드 9개를 이겨서, 큰 보드에서 3줄을 만드세요</div>
+</header>
+
+<div class="toolbar">
+  <button id="modePvp" class="on">👥 2인 대전</button>
+  <button id="modeAi">🤖 AI 대전</button>
+  <button id="resetBtn">↺ 새 게임</button>
+</div>
+
+<div class="status" id="status"></div>
+
+<div class="macro" id="macro" role="grid" aria-label="얼티미트 틱택토 보드"></div>
+
+<details>
+  <summary>📖 규칙 보기</summary>
+  <p>
+    ① 3×3 미니보드가 9개 모인 거대한 보드에서 플레이합니다.<br>
+    ② 내가 둔 <b>칸의 위치</b>가 상대가 두어야 할 <b>미니보드의 위치</b>를 결정합니다.
+    (예: 미니보드의 왼쪽 위 칸에 두면 → 상대는 왼쪽 위 미니보드에 둬야 함)<br>
+    ③ 노란 형광펜으로 칠해진 곳이 지금 둘 수 있는 보드입니다.<br>
+    ④ 가야 할 보드가 이미 끝났다면(승부남/꽉 참) 아무 보드나 둘 수 있습니다.<br>
+    ⑤ 미니보드에서 3줄을 만들면 그 보드를 차지합니다. 큰 보드에서 미니보드 3개를 한 줄로 차지하면 <b>최종 승리!</b>
+  </p>
+</details>
+
+<canvas id="confetti"></canvas>
+
+<div class="banner" id="banner">
+  <div class="banner-card">
+    <h2 id="bannerTitle"></h2>
+    <p id="bannerSub"></p>
+    <button id="bannerBtn">한 판 더!</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+  let boards, winners, active, player, over, mode = 'pvp', aiThinking = false;
+  const scores = { X:0, O:0, D:0 };
+
+  const macroEl = document.getElementById('macro');
+  const statusEl = document.getElementById('status');
+  const banner = document.getElementById('banner');
+
+  const svgX = (cls='') => `
+    <svg viewBox="0 0 100 100" class="${cls}" aria-hidden="true">
+      <path class="stroke" stroke="var(--ink-x)" d="M18 15 C 35 38, 62 66, 84 87"/>
+      <path class="stroke s2" stroke="var(--ink-x)" d="M83 17 C 64 36, 38 64, 15 84"/>
+    </svg>`;
+  const svgO = (cls='') => `
+    <svg viewBox="0 0 100 100" class="${cls}" aria-hidden="true">
+      <path class="stroke-o" stroke="var(--ink-o)"
+        d="M50 12 C 25 12, 12 30, 13 51 C 14 74, 30 89, 51 88 C 74 87, 88 70, 87 49 C 86 28, 70 13, 52 13"/>
+    </svg>`;
+
+  function newGame(){
+    boards = Array.from({length:9}, () => Array(9).fill(null));
+    winners = Array(9).fill(null);
+    active = null;          // null = 아무 곳이나
+    player = 'X';
+    over = false;
+    aiThinking = false;
+    banner.classList.remove('show');
+    build();
+    updateStatus();
+  }
+
+  function build(){
+    macroEl.innerHTML = '';
+    for(let b=0; b<9; b++){
+      const mini = document.createElement('div');
+      mini.className = 'mini';
+      mini.dataset.b = b;
+      for(let c=0; c<9; c++){
+        const cell = document.createElement('button');
+        cell.className = 'cell';
+        cell.dataset.b = b; cell.dataset.c = c;
+        cell.setAttribute('aria-label', `${b+1}번 보드 ${c+1}번 칸`);
+        cell.addEventListener('click', onCell);
+        mini.appendChild(cell);
+      }
+      const ov = document.createElement('div');
+      ov.className = 'overlay';
+      ov.dataset.w = '';
+      mini.appendChild(ov);
+      macroEl.appendChild(mini);
+    }
+    paint();
+  }
+
+  function onCell(e){
+    if(over || aiThinking) return;
+    const b = +e.currentTarget.dataset.b, c = +e.currentTarget.dataset.c;
+    if(!isLegal(b,c)) return;
+    place(b,c);
+    if(!over && mode==='ai' && player==='O'){
+      aiThinking = true;
+      updateStatus();
+      setTimeout(aiMove, 550);
+    }
+  }
+
+  function isLegal(b,c){
+    if(winners[b] || boards[b][c]) return false;
+    return active===null || active===b;
+  }
+
+  function place(b,c){
+    boards[b][c] = player;
+    renderMark(b,c);
+
+    // 미니보드 판정
+    if(lineWin(boards[b], player)){
+      winners[b] = player;
+    } else if(boards[b].every(v=>v)){
+      winners[b] = 'D';
+    }
+
+    // 최종 판정
+    const macroCells = winners.map(w => (w==='X'||w==='O') ? w : null);
+    if(lineWin(macroCells, player)){
+      over = true;
+      scores[player]++;
+      endGame(player);
+    } else if(winners.every(w=>w)){
+      over = true;
+      scores.D++;
+      endGame('D');
+    }
+
+    // 다음 활성 보드
+    active = winners[c] ? null : c;
+    if(!over) player = player==='X' ? 'O' : 'X';
+
+    paint();
+    updateStatus();
+  }
+
+  function lineWin(cells, p){
+    return LINES.some(L => L.every(i => cells[i]===p));
+  }
+
+  function renderMark(b,c){
+    const cell = macroEl.querySelector(`.cell[data-b="${b}"][data-c="${c}"]`);
+    cell.innerHTML = player==='X' ? svgX() : svgO();
+    cell.disabled = true;
+  }
+
+  function paint(){
+    macroEl.querySelectorAll('.mini').forEach(mini => {
+      const b = +mini.dataset.b;
+      const ov = mini.querySelector('.overlay');
+      const w = winners[b] || '';
+
+      // 승리 마크는 상태가 바뀐 순간에만 한 번 그림 (매 턴 재애니메이션 방지)
+      if(ov.dataset.w !== w){
+        ov.dataset.w = w;
+        mini.classList.remove('wx','wo','wd');
+        if(w==='X'){ mini.classList.add('wx'); ov.innerHTML = svgX(); }
+        else if(w==='O'){ mini.classList.add('wo'); ov.innerHTML = svgO(); }
+        else if(w==='D'){ mini.classList.add('wd'); ov.innerHTML = '<span class="draw-mark">무</span>'; }
+        else ov.innerHTML = '';
+      }
+
+      mini.classList.toggle('active', !w && !over && (active===null || active===b));
+    });
+  }
+
+  function updateStatus(){
+    if(over) return;
+    const badge = player==='X' ? `<span class="badge">${svgX()}</span>` : `<span class="badge">${svgO()}</span>`;
+    let msg;
+    if(aiThinking) msg = '🤖 AI가 고민 중…';
+    else {
+      const who = mode==='ai' ? (player==='X' ? '내 차례' : 'AI 차례') : `${player} 차례`;
+      const where = active===null ? '아무 보드나 OK' : '노란 보드에 두세요';
+      msg = `${who} · ${where}`;
+    }
+    statusEl.innerHTML = badge + msg;
+  }
+
+  function endGame(result){
+    const t = document.getElementById('bannerTitle');
+    const s = document.getElementById('bannerSub');
+    let celebrate = false;
+    if(result==='D'){ t.textContent = '🤝 무승부!'; s.textContent = '승부가 나지 않았습니다.'; }
+    else if(mode==='ai'){
+      if(result==='X'){ t.textContent = '🎉 승리!'; s.textContent = 'AI를 이겼습니다.'; celebrate = true; }
+      else { t.textContent = '🤖 AI 승리'; s.textContent = '패배하였습니다.'; }
+    } else {
+      t.textContent = `🎉 ${result} 승리!`;
+      s.textContent = '큰 보드 1줄 완성.';
+      celebrate = true;
+    }
+    if(celebrate) fireConfetti(result);
+    setTimeout(()=>banner.classList.add('show'), 500);
+  }
+
+  /* ===== 색종이 팡파레 ===== */
+  const cvs = document.getElementById('confetti');
+  const ctx = cvs.getContext('2d');
+  let pieces = [], confettiRAF = null;
+
+  function resizeCanvas(){
+    cvs.width = window.innerWidth * devicePixelRatio;
+    cvs.height = window.innerHeight * devicePixelRatio;
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  function fireConfetti(winner){
+    if(window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    // 승자 색을 메인으로, 종이/형광펜 색을 곁들임
+    const main = winner==='O' ? '#C63D3D' : '#2B4C9B';
+    const colors = [main, main, '#FFEE8C', '#F2A0A0', '#9FB6E8', '#FBF9F2'];
+    const W = window.innerWidth, H = window.innerHeight;
+
+    // 좌우 하단에서 터지는 대포 2발 + 위에서 흩날리는 조각
+    const spawn = (x, y, angle, count, speed) => {
+      for(let i=0;i<count;i++){
+        const a = angle + (Math.random()-0.5) * 1.1;
+        const v = speed * (0.5 + Math.random()*0.7);
+        pieces.push({
+          x, y,
+          vx: Math.cos(a)*v,
+          vy: Math.sin(a)*v,
+          w: 6 + Math.random()*7,
+          h: 4 + Math.random()*5,
+          rot: Math.random()*Math.PI*2,
+          vr: (Math.random()-0.5)*0.3,
+          color: colors[Math.floor(Math.random()*colors.length)],
+          life: 1,
+          decay: 0.006 + Math.random()*0.005,
+          shape: Math.random() < 0.25 ? 'circle' : 'rect'
+        });
+      }
+    };
+    spawn(0, H*0.85, -Math.PI/3.2, 70, 15);          // 왼쪽 대포 ↗
+    spawn(W, H*0.85, -Math.PI + Math.PI/3.2, 70, 15); // 오른쪽 대포 ↖
+    for(let i=0;i<50;i++){                            // 위에서 낙하
+      pieces.push({
+        x: Math.random()*W, y: -20 - Math.random()*150,
+        vx: (Math.random()-0.5)*2, vy: 2 + Math.random()*2,
+        w: 6 + Math.random()*7, h: 4 + Math.random()*5,
+        rot: Math.random()*Math.PI*2, vr: (Math.random()-0.5)*0.25,
+        color: colors[Math.floor(Math.random()*colors.length)],
+        life: 1, decay: 0.004 + Math.random()*0.004,
+        shape: Math.random() < 0.25 ? 'circle' : 'rect'
+      });
+    }
+    if(!confettiRAF) tick();
+  }
+
+  function tick(){
+    ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
+    pieces = pieces.filter(p => p.life > 0 && p.y < window.innerHeight + 30);
+    for(const p of pieces){
+      p.vy += 0.22;                 // 중력
+      p.vx *= 0.985; p.vy *= 0.985; // 공기저항
+      p.x += p.vx + Math.sin(p.rot*3)*0.4; // 팔랑거림
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.life -= p.decay;
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life*1.5));
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      if(p.shape==='circle'){
+        ctx.beginPath();
+        ctx.arc(0, 0, p.w/2, 0, Math.PI*2);
+        ctx.fill();
+      } else {
+        // 회전에 따라 납작해지며 종이가 뒤집히는 느낌
+        ctx.scale(1, 0.4 + Math.abs(Math.sin(p.rot*2))*0.6);
+        ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+      }
+      ctx.restore();
+    }
+    if(pieces.length){
+      confettiRAF = requestAnimationFrame(tick);
+    } else {
+      confettiRAF = null;
+      ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
+    }
+  }
+
+  /* ===== 간단한 AI (휴리스틱 알고리즘) ===== */
+  function legalMoves(){
+    const moves = [];
+    for(let b=0;b<9;b++){
+      if(winners[b]) continue;
+      if(active!==null && active!==b) continue;
+      for(let c=0;c<9;c++) if(!boards[b][c]) moves.push([b,c]);
+    }
+    return moves;
+  }
+
+  function wouldWinBoard(board, c, p){
+    const copy = board.slice(); copy[c] = p;
+    return lineWin(copy, p);
+  }
+
+  function aiMove(){
+    if(over) return;
+    const moves = legalMoves();
+    if(!moves.length) return;
+
+    const me='O', foe='X';
+    const macroCells = () => winners.map(w=>(w==='X'||w==='O')?w:null);
+
+    let best=null, bestScore=-Infinity;
+    for(const [b,c] of moves){
+      let s = 0;
+      // 1. 이 수로 미니보드를 따고 → 최종 승리?
+      if(wouldWinBoard(boards[b], c, me)){
+        s += 50;
+        const mc = macroCells(); mc[b] = me;
+        if(lineWin(mc, me)) s += 10000;
+      }
+      // 2. 상대의 미니보드 3줄 차단
+      if(wouldWinBoard(boards[b], c, foe)) s += 40;
+      // 3. 상대를 자유 보드로 보내는 수는 감점
+      if(winners[c] || (c===b && wouldWinBoard(boards[b], c, me))) s -= 15;
+      // 4. 보내는 보드에서 상대가 바로 미니보드를 딸 수 있으면 감점
+      if(!winners[c]){
+        for(let cc=0;cc<9;cc++){
+          if(!boards[c][cc] && wouldWinBoard(boards[c], cc, foe)){ s -= 25; break; }
+        }
+      }
+      // 5. 위치 선호: 중앙 보드/중앙 칸/코너
+      if(b===4) s += 4;
+      if(c===4) s += 3;
+      if([0,2,6,8].includes(c)) s += 1;
+      s += Math.random()*2; // 동점 무작위성
+
+      if(s > bestScore){ bestScore = s; best = [b,c]; }
+    }
+
+    aiThinking = false;
+    place(best[0], best[1]);
+  }
+
+  /* ===== 컨트롤 ===== */
+  const pvpBtn = document.getElementById('modePvp');
+  const aiBtn = document.getElementById('modeAi');
+  pvpBtn.addEventListener('click', ()=>{ mode='pvp'; pvpBtn.classList.add('on'); aiBtn.classList.remove('on'); newGame(); });
+  aiBtn.addEventListener('click', ()=>{ mode='ai'; aiBtn.classList.add('on'); pvpBtn.classList.remove('on'); newGame(); });
+  document.getElementById('resetBtn').addEventListener('click', newGame);
+  document.getElementById('bannerBtn').addEventListener('click', newGame);
+
+  newGame();
+})();
+</script>
+</body>
+</html>
